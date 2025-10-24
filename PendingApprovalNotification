@@ -1,0 +1,66 @@
+#### Library ####
+import os
+import time
+import ctypes
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+##### 변수 선언 ####
+
+# 감시할 폴더 경로
+WATCH_FOLDER = r"C:\SAPfiles"
+
+# Windows 파일 속성 상수 (숨김)
+FILE_ATTRIBUTE_HIDDEN = 0x02
+
+##### Functions ####
+def hide_file(file_path):
+    """파일을 숨김 속성으로 설정"""
+    try:
+        # 파일이 존재하는지 확인
+        if os.path.exists(file_path):
+            # 이미 숨김 상태인지 확인
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(file_path)
+            if attrs != -1 and not attrs & FILE_ATTRIBUTE_HIDDEN:
+                ctypes.windll.kernel32.SetFileAttributesW(file_path, attrs | FILE_ATTRIBUTE_HIDDEN)
+                print(f"[HIDDEN] {file_path}")
+    except Exception as e:
+        print(f"Fail to hide file: {file_path} ({e})")
+
+def hide_all_existing_files(folder):
+    """폴더 내 모든 기존 파일 숨기기"""
+    print(f"Hiding the file... ({folder})")
+    for root, dirs, files in os.walk(folder):
+        for name in files:
+            hide_file(os.path.join(root, name))
+    print("✅ File hidden complete\n")
+
+class FileCreateHandler(FileSystemEventHandler):
+    """새 파일 생성 시 자동 숨김"""
+    def on_created(self, event):
+        if not event.is_directory:
+            file_path = event.src_path
+            # 파일이 완전히 생성되도록 잠시 대기
+            time.sleep(0.5)
+            hide_file(file_path)
+
+
+if __name__ == "__main__":
+    print(f"�� Watching SAP attachment files: {WATCH_FOLDER}")
+
+    # 실행 시 기존 파일 먼저 숨김
+    hide_all_existing_files(WATCH_FOLDER)
+
+    # 새 파일 감시 시작
+    event_handler = FileCreateHandler()
+    observer = Observer()
+    observer.schedule(event_handler, WATCH_FOLDER, recursive=True)
+    observer.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("�� Watching terminated")
+        observer.stop()
+    observer.join()
